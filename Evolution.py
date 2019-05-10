@@ -1,7 +1,66 @@
 from MemHeuristic import *
 from EvolutionaryFramework import *
-import numpy as np
+
+import math
+# import numpy as np
+import random
 import time
+import random
+from Queue import Queue
+import threading
+
+def _new_execute(used_sol,item,target_file_path, function_name, main_memory,start_time,flag):
+    while True:
+        if item[1][0] < 1:
+            solution_str = str(item[0].blocks.grid_dim) + str(item[0].threads.block_dim) + str(item[0].construct_running_arguments())
+            # if solution_str in used_solution:
+            if solution_str in used_sol:
+                break
+            # used_solution[solution_str] = True
+            used_sol.put(solution_str)
+            global_env = parse_function(target_file_path)
+            generate_memory_container(main_memory.keys(), global_env)
+            raw_code = global_env.get_value(function_name)
+            blocks = item[0].blocks
+            threads = item[0].threads
+            arguments = item[0].construct_running_arguments()
+            for idx, variable in enumerate(raw_code.argument_lst):
+                if variable not in arguments and raw_code.type_lst[idx].find("*") == -1:
+                    arguments[variable] = 2  # temp action, need more focus
+            arguments = generate_arguments(global_env.get_value(function_name), arguments)
+            arguments["main_memory"] = main_memory
+            if flag:
+                execute_framework_advanced(blocks, threads, raw_code.raw_codes, arguments, global_env)
+            else:
+                execute_framework(blocks, threads, raw_code.raw_codes, arguments, global_env)
+            current_time = time.time()
+            print "Current solution total cost time is " + str(current_time - start_time)
+        else:
+            break
+
+class checkableQueue(Queue):
+    def __contains__(self, item):
+        with self.mutex:
+            return item in self.queue
+
+
+class executeThread:
+    def __init__(self,):
+        self.pool = list()
+        self.used_sol = checkableQueue()
+        self.current_task = 0
+
+    def setup_execute(self,solution_list,target_file_path, function_name, main_memory,start_time,flag):
+        for i in xrange(len(solution_list)):
+            self.pool.append(threading.Thread(target=_new_execute, args=(self.used_sol,solution_list[i],target_file_path, function_name, main_memory,start_time,flag)))
+        for single_thread in self.pool:
+            single_thread.start()
+        # todo
+
+    def send_item(self, target_item):
+        self.current_task += 1
+        self.input_queue.put(target_item)
+
 
 
 class DimensionFactory:
@@ -15,8 +74,9 @@ class DimensionFactory:
     def mutation(self, current_tuple, is_block):
         current_limited = self.block_limited if is_block else self.thread_limited
         current_dimension = self.block_dimension if is_block else self.thread_dimension
-        current_class = Block if is_block else Thread
-        direction_vector = np.random.randint(low=-1, high=2, size=current_dimension)
+        current_class = Block if is_block else cuda_Thread
+        # direction_vector = random.randint(low=-1, high=2, size=current_dimension)
+        direction_vector = [random.randint(-1, 1)]
         direction_vector = list(direction_vector)
         current_lst = [item for item in current_tuple]
         for i in xrange(len(direction_vector)):
@@ -31,8 +91,8 @@ class DimensionFactory:
     def random_dimension(self, is_block):
         current_limited = self.block_limited if is_block else self.thread_limited
         current_dimension = self.block_dimension if is_block else self.thread_dimension
-        current_class = Block if is_block else Thread
-        dimension_vector = np.random.randint(low=1, high=current_limited + 1, size=current_dimension)
+        current_class = Block if is_block else cuda_Thread
+        dimension_vector = [random.randint(1, current_limited)]
         dimension_vector = list(dimension_vector)
         for i in xrange(len(dimension_vector), 3):
             dimension_vector.append(1)
@@ -81,7 +141,7 @@ class ArgumentsItem:
     def construct_argus_dict(variable_lst):
         result_dict = dict()
         for item in variable_lst:
-            result_dict[item[0]] = 10 * abs(np.random.standard_cauchy())
+            result_dict[item[0]] = 10 * abs(math.tan(random.uniform(-0.5,0.5)*3.1415926))
         return result_dict
 
     def copy_initial_argus_to_target(self, target_item):
@@ -119,14 +179,15 @@ class ArgumentsItem:
         self.copy_initial_argus_to_target(cauchy_item)
         cauchy_item.father_generate = "cauchy"
         for item in self.should_evolution:
-            normal_random_gap = np.random.normal()
+            normal_random_gap = random.normalvariate(0,1)
             normal_item.initial_argus[item[0]] += normal_random_gap
             normal_item.step_size += normal_random_gap ** 2
-            cauchy_random_gap = np.random.standard_cauchy()
+            cauchy_random_gap = math.tan(random.uniform(-0.5,0.5)*3.1415926)
+            # cauchy_random_gap = np.random.standard_cauchy()
             cauchy_item.initial_argus[item[0]] += cauchy_random_gap
             cauchy_item.step_size += cauchy_random_gap ** 2
-        cauchy_item.step_size = np.sqrt(cauchy_item.step_size)
-        normal_item.step_size = np.sqrt(normal_item.step_size)
+        cauchy_item.step_size = math.sqrt(cauchy_item.step_size)
+        normal_item.step_size = math.sqrt(normal_item.step_size)
         return normal_item, cauchy_item
 
     def get_vector_format_for_all_item(self):
@@ -216,7 +277,8 @@ class BranchItem(ArgumentsItem):
     def construct_argus_dict(variable_lst):
         result_dict = dict()
         for item in variable_lst:
-            result_dict[item[0]] = np.random.uniform(low=0, high=10)
+            result_dict[item[0]] = random.uniform(0,10)
+            # result_dict[item[0]] = np.random.uniform(low=0, high=10)
         return result_dict
 
     def mutation(self):
@@ -241,14 +303,16 @@ class BranchItem(ArgumentsItem):
         self.copy_initial_argus_to_target(cauchy_item)
         cauchy_item.father_generate = "cauchy"
         for item in self.should_evolution:
-            normal_random_gap = np.random.normal()
+            normal_random_gap = random.normalvariate(0,1)
             normal_item.initial_argus[item[0]] += normal_random_gap
             normal_item.step_size += normal_random_gap ** 2
-            cauchy_random_gap = np.random.standard_cauchy()
+            cauchy_random_gap = math.tan(random.uniform(-0.5,0.5)*3.1415926)
+
+            # cauchy_random_gap = np.random.standard_cauchy()
             cauchy_item.initial_argus[item[0]] += cauchy_random_gap
             cauchy_item.step_size += cauchy_random_gap ** 2
-        cauchy_item.step_size = np.sqrt(cauchy_item.step_size)
-        normal_item.step_size = np.sqrt(normal_item.step_size)
+        cauchy_item.step_size = math.sqrt(cauchy_item.step_size)
+        normal_item.step_size = math.sqrt(normal_item.step_size)
         return normal_item, cauchy_item
 
 
@@ -327,21 +391,25 @@ def generate_initialized_setting(target_file_path, function_name, main_memory, i
     failed = 0
     total_generation = 0
     test_result_lst = list()
+
     if fixed_dimension is None:
         fixed_dimension = [(1, 1, 1), (34, 1, 1)]
     for i in xrange(test_round):
         start_time = time.time()
+
         generator = evolutionary_item_factory(target_file_path, function_name, main_memory,
                                               Block((-1, -1, 0), fixed_dimension[0]),
-                                              Thread((-1, -1, 0), fixed_dimension[1]), evolve_dimension, is_branch)
+                                              cuda_Thread((-1, -1, 0), fixed_dimension[1]), evolve_dimension, is_branch)
         generator = generator_for_evolutionary_factory(generator)
 
-        population_lst, current_generation = evolutionary_framework(3, 50, generator, sorter, fitness, acceptable_factory(is_branch), selector, mutation, None, 10)
+        population_lst, current_generation = evolutionary_framework(3, 50, generator, sorter, fitness, acceptable_factory(is_branch), selector, mutation, None, 5)
+
         # population_lst, current_generation = evolutionary_framework_local(20, 1, generator, sorter, fitness, acceptable_factory(is_branch), selector, mutation, None)
         if population_lst[0][1][0] >= 1:
             print population_lst[0][1][0]
             failed += 1
         total_generation += current_generation + 1
+
         for item in population_lst:
             if item[1][0] < 1:
                 print item[0].blocks.grid_dim, item[0].threads.block_dim, item[0].construct_running_arguments()
@@ -361,84 +429,66 @@ def auto_test_target_function(target_file_path, function_name, main_memory, used
     start_time = time.time()
     solution_lst = generate_initialized_setting(target_file_path, function_name, main_memory,
                                                 evolve_dimension=not used_default_dimension, fixed_dimension=fixed_dimension)
-    used_solution = dict()
-    for item in solution_lst:
-        if item[1][0] < 1:
-            solution_str = str(item[0].blocks.grid_dim) + str(item[0].threads.block_dim) + str(item[0].construct_running_arguments())
-            if solution_str in used_solution:
-                continue
-            used_solution[solution_str] = True
-            global_env = parse_function(target_file_path)
-            generate_memory_container(main_memory.keys(), global_env)
-            raw_code = global_env.get_value(function_name)
-            blocks = item[0].blocks
-            threads = item[0].threads
-            arguments = item[0].construct_running_arguments()
-            for idx, variable in enumerate(raw_code.argument_lst):
-                if variable not in arguments and raw_code.type_lst[idx].find("*") == -1:
-                    arguments[variable] = 2  # temp action, need more focus
-            arguments = generate_arguments(global_env.get_value(function_name), arguments)
-            arguments["main_memory"] = main_memory
-            execute_framework(blocks, threads, raw_code.raw_codes, arguments, global_env)
-            current_time = time.time()
-            print "Current solution total cost time is " + str(current_time - start_time)
 
-
-def auto_test_target_function_dynamical(target_file_path, function_name, main_memory, used_default_dimension=False, fixed_dimension=None):
-    start_time = time.time()
-    solution_lst = generate_initialized_setting(target_file_path, function_name, main_memory,
-                                                evolve_dimension=not used_default_dimension, fixed_dimension=fixed_dimension)
-    used_solution = dict()
-    for item in solution_lst:
-        if item[1][0] < 1:
-            solution_str = str(item[0].blocks.grid_dim) + str(item[0].threads.block_dim) + str(item[0].construct_running_arguments())
-            if solution_str in used_solution:
-                continue
-            used_solution[solution_str] = True
-            global_env = parse_function(target_file_path)
-            generate_memory_container(main_memory.keys(), global_env)
-            raw_code = global_env.get_value(function_name)
-            blocks = item[0].blocks
-            threads = item[0].threads
-            arguments = item[0].construct_running_arguments()
-            for idx, variable in enumerate(raw_code.argument_lst):
-                if variable not in arguments and raw_code.type_lst[idx].find("*") == -1:
-                    arguments[variable] = 2  # temp action, need more focus
-            arguments = generate_arguments(global_env.get_value(function_name), arguments)
-            arguments["main_memory"] = main_memory
-            execute_framework_dynamical(blocks, threads, raw_code.raw_codes, arguments, global_env)
-            current_time = time.time()
-            print "Current solution total cost time is " + str(current_time - start_time)
+    thread_pool = executeThread()
+    thread_pool.setup_execute(solution_lst, target_file_path, function_name, main_memory, start_time,0)
+    # used_solution = dict()
+    # for item in solution_lst:
+    #     if item[1][0] < 1:
+    #         solution_str = str(item[0].blocks.grid_dim) + str(item[0].threads.block_dim) + str(item[0].construct_running_arguments())
+    #         if solution_str in used_solution:
+    #             continue
+    #         used_solution[solution_str] = True
+    #         global_env = parse_function(target_file_path)
+    #         generate_memory_container(main_memory.keys(), global_env)
+    #         raw_code = global_env.get_value(function_name)
+    #         blocks = item[0].blocks
+    #         threads = item[0].threads
+    #         arguments = item[0].construct_running_arguments()
+    #         for idx, variable in enumerate(raw_code.argument_lst):
+    #             if variable not in arguments and raw_code.type_lst[idx].find("*") == -1:
+    #                 arguments[variable] = 2  # temp action, need more focus
+    #         arguments = generate_arguments(global_env.get_value(function_name), arguments)
+    #         arguments["main_memory"] = main_memory
+    #         execute_framework(blocks, threads, raw_code.raw_codes, arguments, global_env)
+    #         current_time = time.time()
+    #         print "Current solution total cost time is " + str(current_time - start_time)
 
 
 def auto_test_target_function_advanced(target_file_path, function_name, main_memory,
                                        used_default_dimension=False, fixed_dimension=None):
+    start_time = time.time()
     solution_lst = generate_initialized_setting(target_file_path, function_name, main_memory,
                                                 evolve_dimension=not used_default_dimension,
                                                 fixed_dimension=fixed_dimension)
-    used_solution = dict()
+
     if solution_lst[0][1][0] >= 1:
         print("=========================================================")
         print("In case that no conflicts, so all barrier functions located in original code are redundant.")
         print("=========================================================")
-    for item in solution_lst:
-        if item[1][0] < 1:
-            solution_str = str(item[0].blocks.grid_dim) + str(item[0].threads.block_dim) + str(item[0].construct_running_arguments())
-            if solution_str in used_solution:
-                continue
-            used_solution[solution_str] = True
-            global_env = parse_function(target_file_path)
-            generate_memory_container(main_memory.keys(), global_env)
-            raw_code = global_env.get_value(function_name)
-            blocks = item[0].blocks
-            threads = item[0].threads
-            arguments = item[0].construct_running_arguments()
-            for idx, variable in enumerate(raw_code.argument_lst):
-                if variable not in arguments and raw_code.type_lst[idx].find("*") == -1:
-                    arguments[variable] = 2  # temp action, need more focus
-            arguments = generate_arguments(global_env.get_value(function_name), arguments)
-            arguments["main_memory"] = main_memory
-            execute_framework_advanced(blocks, threads, raw_code.raw_codes, arguments, global_env)
+    thread_pool = executeThread()
+    thread_pool.setup_execute(solution_lst, target_file_path, function_name, main_memory, start_time,1)
+    # used_solution = dict()
+    # for item in solution_lst:
+    #     if item[1][0] < 1:
+    #         solution_str = str(item[0].blocks.grid_dim) + str(item[0].threads.block_dim) + str(item[0].construct_running_arguments())
+    #         if solution_str in used_solution:
+    #             continue
+    #         used_solution[solution_str] = True
+    #         global_env = parse_function(target_file_path)
+    #         generate_memory_container(main_memory.keys(), global_env)
+    #         raw_code = global_env.get_value(function_name)
+    #         blocks = item[0].blocks
+    #         threads = item[0].threads
+    #         arguments = item[0].construct_running_arguments()
+    #         for idx, variable in enumerate(raw_code.argument_lst):
+    #             if variable not in arguments and raw_code.type_lst[idx].find("*") == -1:
+    #                 arguments[variable] = 2  # temp action, need more focus
+    #         arguments = generate_arguments(global_env.get_value(function_name), arguments)
+    #         arguments["main_memory"] = main_memory
+    #         execute_framework_advanced(blocks, threads, raw_code.raw_codes, arguments, global_env)
+    #         current_time = time.time()
+    #         print "Current solution total cost time is " + str(current_time - start_time)
 
 
 if __name__ == "__main__":

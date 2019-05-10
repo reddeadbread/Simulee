@@ -1,6 +1,6 @@
 import re
 from DataStructure import *
-from collections import OrderedDict
+# from collections import OrderedDict
 from DetectBug import *
 from StatementExecutor import *
 from MainProcess import generator_for_dimension_var
@@ -104,7 +104,13 @@ def generate_variable_depend_path(global_env, function_name):
         result_dict[updated_var][line_index] = True
     for each_var in result_dict:
         if isinstance(result_dict[each_var], dict):
-            result_dict[each_var] = OrderedDict(sorted(result_dict[each_var].items()))
+            result_dict[each_var] = dict(sorted(result_dict[each_var].items()))
+
+
+
+
+
+            # result_dict[each_var] = OrderedDict(sorted(result_dict[each_var].items()))
     for each_var in initial_var_dict:
         initial_var_dict[each_var] = set(initial_var_dict[each_var])
     return result_dict, target_kernel_codes, initial_var_dict
@@ -158,10 +164,10 @@ def execute_heuristic(blocks, threads, raw_codes, arguments,
         local_env = Environment()
         local_env.binding_value(arguments)
         for thread_indexes in generator_for_dimension_var(threads):
-            global_env.add_value("@threadIdx", Thread(thread_indexes,
-                                                      (threads.limit_x, threads.limit_y, threads.limit_z)))
-            global_env.add_value("@blockDim", Thread((threads.limit_x, threads.limit_y, threads.limit_z),
-                                                     (threads.limit_x, threads.limit_y, threads.limit_z)))
+            global_env.add_value("@threadIdx", cuda_Thread(thread_indexes,
+                                                           (threads.limit_x, threads.limit_y, threads.limit_z)))
+            global_env.add_value("@blockDim", cuda_Thread((threads.limit_x, threads.limit_y, threads.limit_z),
+                                                          (threads.limit_x, threads.limit_y, threads.limit_z)))
             global_access_index = dict()
             shared_access_index = dict()
             current_access_index = None
@@ -201,10 +207,10 @@ def execute_branch_heuristic(blocks, threads, raw_codes, arguments, global_env=N
         local_env = Environment()
         local_env.binding_value(arguments)
         for thread_indexes in generator_for_dimension_var(threads):
-            global_env.add_value("@threadIdx", Thread(thread_indexes,
-                                                      (threads.limit_x, threads.limit_y, threads.limit_z)))
-            global_env.add_value("@blockDim", Thread((threads.limit_x, threads.limit_y, threads.limit_z),
-                                                     (threads.limit_x, threads.limit_y, threads.limit_z)))
+            global_env.add_value("@threadIdx", cuda_Thread(thread_indexes,
+                                                           (threads.limit_x, threads.limit_y, threads.limit_z)))
+            global_env.add_value("@blockDim", cuda_Thread((threads.limit_x, threads.limit_y, threads.limit_z),
+                                                          (threads.limit_x, threads.limit_y, threads.limit_z)))
             kernel_codes = KernelCodes(raw_codes)
             while not kernel_codes.is_over():
                 current_stmt = kernel_codes.get_current_statement_and_set_next()
@@ -232,10 +238,10 @@ def parse_dimension(global_env, target_function_name):
     block_pattern = re.compile(r"blockIdx, i32 0, i32 (?P<sequence>\d+)")
     target_function = global_env.get_value(target_function_name)
     for each_line in target_function.raw_codes.split("\n"):
-        if each_line.find("blockIdx,") != -1:
+        if each_line.find("blockIdx") != -1:
             matcher = block_pattern.search(each_line)
             block_dict[matcher.group("sequence")] = True
-        elif each_line.find("threadIdx,") != -1:
+        elif each_line.find("threadIdx") != -1:
             matcher = thread_pattern.search(each_line)
             thread_dict[matcher.group("sequence")] = True
     return [len(block_dict) if len(block_dict) != 0 else 1, len(thread_dict)]

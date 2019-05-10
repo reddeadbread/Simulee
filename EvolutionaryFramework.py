@@ -1,15 +1,37 @@
-from multiprocessing import Process, Manager, Queue
+# from multiprocessing import Process, Manager, Queue
 import collections
-import numpy as np
+from Queue import Queue
+# from StoppableThread import StoppableThread
+import threading
+# import numpy as np
+
+
+# class StoppableThread(threading.Thread):
+#
+#     def __init__(self, group=None, target=None, name=None,
+#                  args=(), kwargs=None, verbose=None):
+#         threading.Thread.__init__(self, group=group, target=target, name=name,args=args, kwargs=kwargs)
+#         # threading.Thread.__init__(self, group=group, target=target, name=name,
+#         #          args=args, kwargs=kwargs, verbose=verbose)
+#         self._stop_event = threading.Event()
+#
+#     def stop(self):
+#         self._stop_event.set()
+#
+#     def terminate(self):
+#         self._running = False
+#
+#     def stopped(self):
+#         return self._stop_event.is_set()
 
 
 def _new_fitness(input_queue, output_queue, fitness):
     while True:
-        new_item = input_queue.get()
-        output_queue.put((new_item, fitness(new_item)))
+            new_item = input_queue.get()
+            output_queue.put((new_item, fitness(new_item)))
 
 
-class FitnessProcess:
+class FitnessThread:
 
     def __init__(self, process_limited):
         self.pool = list()
@@ -20,7 +42,7 @@ class FitnessProcess:
 
     def setup_fitness(self, fitness):
         for i in xrange(self.process_limited):
-            self.pool.append(Process(target=_new_fitness, args=(self.input_queue, self.output_queue, fitness)))
+            self.pool.append(threading.Thread(target=_new_fitness, args=(self.input_queue, self.output_queue, fitness)))
         for single_process in self.pool:
             single_process.start()
 
@@ -29,8 +51,13 @@ class FitnessProcess:
         self.input_queue.put(target_item)
 
     def close(self):
-        for i in xrange(self.process_limited):
-            self.pool[i].terminate()
+        for i in self.pool:
+            i.join()
+        # for i in xrange(self.process_limited):
+        #     if self.pool[i].is_alive():
+        #         self.pool[i].join()
+
+
 
     def __iter__(self):
         return self
@@ -44,7 +71,7 @@ class FitnessProcess:
 
 def evolutionary_framework(generation, population, generator, sorter,
                            fitness, acceptable, selector, mutation, crossover, process_limited):
-    process_pool = FitnessProcess(process_limited)
+    process_pool = FitnessThread(process_limited)
     process_pool.setup_fitness(fitness)
     population_lst = generator(population)
     for single_item in population_lst:
@@ -79,9 +106,9 @@ def evolutionary_framework(generation, population, generator, sorter,
         #     np.random.shuffle(population_lst)
         population_lst = population_lst[: population]
         if acceptable is not None and acceptable(population_lst):
-            process_pool.close()
+            # process_pool.close()
             return population_lst, i
-    process_pool.close()
+    # process_pool.close()
     return population_lst, generation
 
 
