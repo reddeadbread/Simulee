@@ -1,3 +1,18 @@
+# **Runtime using Jython and multithreading on Intel core i7 4790k**:
+
+| test method       | Simulee/ms | Simulee_Jython/ms                                      |
+| ------------- | --------------------------- | ----------------------------------------------- |
+| test_gunrock_join2 | 1728                           |2957.8        |
+| test_gunrock_join      | 7029.6                           |13396|
+| test_sum_reduced       | 918                           |2648.8    |
+| test_sync_cudpp_sparseMatrixVectorSetFlags         | 892                           |1577.6   |
+| test_sync_FindMaxCorr         | 24647.4                           |11029   |
+| test_sync_cuda_cnn_g_getCost_3         | 18081.6                           |16135.2 |
+| test_splice         | 7073.8                           |4773.2 |
+
+
+
+
 # **Total Detected Real Bug with Positive Feedback**:
 ```
 cudpp: 3 Bugs
